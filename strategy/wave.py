@@ -312,7 +312,7 @@ class WaveStrategy:
         """Get trading restrictions for the given symbol."""
         all_restrictions = self._get_dynamic_restrictions()
         
-        if symbol.startswith("NIFTY BANK"):
+        if symbol.startswith("NIFTY BANK") or symbol.startswith("BANKNIFTY"):
             return all_restrictions['bank_nifty'], False
         elif symbol.startswith("NIFTY"):
             return all_restrictions['nifty'], False
