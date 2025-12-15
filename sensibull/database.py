@@ -55,9 +55,30 @@ def init_db():
         )
     ''')
     
+    # Table to store strict latest state for Realtime P&L (updates on every fetch)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS latest_snapshots (
+            profile_id INTEGER PRIMARY KEY,
+            raw_data JSON NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     conn.commit()
     conn.close()
     print("Database initialized.")
+
+def upsert_latest_snapshot(conn, profile_id, data):
+    c = conn.cursor()
+    # SQLite upsert syntax
+    c.execute("""
+        INSERT INTO latest_snapshots (profile_id, raw_data, timestamp) 
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(profile_id) DO UPDATE SET
+            raw_data=excluded.raw_data,
+            timestamp=CURRENT_TIMESTAMP
+    """, (profile_id, json.dumps(data)))
+    conn.commit()
 
 def sync_profiles():
     # Helper to load profiles from file and ensure they exist in DB

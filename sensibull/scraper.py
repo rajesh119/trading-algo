@@ -162,6 +162,11 @@ def run_scraper():
             if not current_data:
                 print(f"Skipping {slug}, no data.")
                 continue
+            
+            # ALWAYS update the latest snapshot for Realtime P&L
+            from database import upsert_latest_snapshot
+            upsert_latest_snapshot(conn, profile_id, current_data)
+            
         except Exception as e:
             print(f"Error fetching {slug}: {e}")
             continue

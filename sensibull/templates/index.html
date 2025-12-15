@@ -56,21 +56,50 @@
 
 <body>
     <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h1>Sensibull Tracker Dashboard</h1>
+        <div>
+            <h1>Sensibull Tracker Dashboard</h1>
+            {% if last_updated %}
+            <div style="color: #666; font-size: 0.9em; margin-top: -10px;">
+                Last Updated: {{ last_updated | to_datetime | attr('strftime')('%H:%M:%S') }}
+            </div>
+            {% endif %}
+        </div>
         <button onclick="restartApp()"
             style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">Restart
             App</button>
     </div>
     <script>
         function restartApp() {
-            if(confirm("Are you sure you want to restart the application?")) {
-                fetch('/restart', {method: 'POST'})
-                .then(response => response.text())
-                .then(text => {
-                    alert(text);
-                    setTimeout(() => location.reload(), 3000);
-                })
-                .catch(err => alert("Error restarting: " + err));
+            if (confirm("Are you sure you want to restart the application?")) {
+                fetch('/restart', { method: 'POST' })
+                    .then(response => response.text())
+                    .then(text => {
+                        alert(text);
+                        setTimeout(() => location.reload(), 3000);
+                    })
+                    .catch(err => alert("Error restarting: " + err));
+            }
+        }
+
+        // Auto-refresh every 60 seconds
+        setInterval(() => {
+            console.log("Auto-refreshing dashboard...");
+            location.reload();
+        }, 60000);
+
+        function deleteDate(date) {
+            if (confirm("Are you sure you want to delete ALL data for " + date + "? This cannot be undone.")) {
+                fetch('/delete_date/' + date, { method: 'DELETE' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert(data.message);
+                            location.reload();
+                        } else {
+                            alert("Error: " + (data.error || "Unknown error"));
+                        }
+                    })
+                    .catch(err => alert("Error deleting: " + err));
             }
         }
     </script>
@@ -79,7 +108,11 @@
             <tr>
                 <th>Profile</th>
                 {% for date in dates %}
-                <th>{{ date }}</th>
+                <th>
+                    {{ date }}
+                    <span onclick="deleteDate('{{ date }}')" style="cursor: pointer; margin-left: 5px; color: #dc3545;"
+                        title="Delete data for {{ date }}">&#128465;</span>
+                </th>
                 {% endfor %}
             </tr>
         </thead>
@@ -89,9 +122,14 @@
                 <td style="text-align: left; font-weight: bold;">{{ profile.name }}</td>
                 {% for date in dates %}
                 <td>
-                    {% set count = matrix.get((profile.id, date), 0) %}
-                    {% if count > 0 %}
-                    <a href="{{ url_for('daily_view', slug=profile.slug, date=date) }}" target="_blank">{{ count }}</a>
+                    {% set val = matrix.get((profile.id, date), {'count': 0, 'pnl': 0}) %}
+                    {% if val.count > 0 %}
+                    <a href="{{ url_for('daily_view', slug=profile.slug, date=date) }}" target="_blank">{{ val.count
+                        }}</a>
+                    <div
+                        style="font-size: 0.85em; margin-top: 4px; font-weight: bold; color: {{ '#28a745' if val.pnl > 0 else '#dc3545' if val.pnl < 0 else '#666' }};">
+                        {{ "{:,.1f}".format(val.pnl) }}
+                    </div>
                     {% else %}
                     <span class="zero">-</span>
                     {% endif %}
