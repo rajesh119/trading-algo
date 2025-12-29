@@ -51,7 +51,7 @@ def run_backtest():
     symbol = data.get('symbol')
     start_date = data.get('start_date')
     end_date = data.get('end_date')
-    interval = data.get('interval', '15minute') # Default to 15 minutes
+    interval = data.get('interval', '15m') # Default to 15 minutes
 
     if not all([symbol, start_date, end_date]):
         return jsonify({"message": "Error: symbol, start_date, and end_date are required."}), 400
