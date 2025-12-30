@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import os
+import re
 from typing import Any, Dict, List, Optional
 from urllib import request
 
@@ -125,9 +126,27 @@ class ZerodhaDriver(BrokerDriver):
                     pass
 
     def _cache_token(self, access_token: str) -> None:
-        """Cache the access token to a file."""
+        """Cache the access token to a file and .env file."""
+        # Cache to file (existing functionality)
         with open(self.token_cache_file, 'w') as f:
             f.write(access_token)
+
+        # Save to .env file
+        env_file = ".env"
+        if os.path.exists(env_file):
+            with open(env_file, 'r') as f:
+                content = f.read()
+        else:
+            content = ""
+
+        key = "BROKER_ACCESS_TOKEN"
+        if re.search(f"^{key}=", content, re.MULTILINE):
+            content = re.sub(f"^{key}=.*", f"{key}={access_token}", content, flags=re.MULTILINE)
+        else:
+            content += f"\n{key}={access_token}\n"
+
+        with open(env_file, 'w') as f:
+            f.write(content)
 
     def _authenticate_via_totp(self) -> Optional[Any]:
         """Programmatic TOTP login using Zerodha web endpoints to obtain access token.

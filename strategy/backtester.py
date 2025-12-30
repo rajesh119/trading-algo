@@ -47,7 +47,7 @@ class BacktesterStrategy:
         try:
             data = self.broker.get_history(self.futures_symbol, interval, start_date, end_date)
             if not data:
-                logger.error(f"No historical data found for {futures_symbol}.")
+                logger.error(f"No historical data found for {self.futures_symbol}.")
                 return
 
             self.historical_data = pd.DataFrame(data)
