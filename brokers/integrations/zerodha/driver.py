@@ -30,6 +30,7 @@ class ZerodhaDriver(BrokerDriver):
     """
 
     def __init__(self, *, login_mode: Optional[str] = None) -> None:
+        import os
         super().__init__()
         self.capabilities = BrokerCapabilities(
             supports_historical=True,
