@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import os
+import re
 from typing import Any, Dict, List, Optional
 from urllib import request
 
@@ -52,22 +53,45 @@ class ZerodhaDriver(BrokerDriver):
         )
         self._kite = None  # kiteconnect client if available
         self._kite_ws = None
+        self.cache_dir = ".cache"
+        self.token_cache_file = os.path.join(self.cache_dir, "zerodha_access_token.txt")
+
+        # Ensure cache directory exists
+        if not os.path.exists(self.cache_dir):
+            os.makedirs(self.cache_dir)
+
+        # Try to load cached token
+        if os.path.exists(self.token_cache_file):
+            with open(self.token_cache_file, 'r') as f:
+                access_token = f.read().strip()
+            if access_token:
+                try:
+                    from kiteconnect import KiteConnect
+                    api_key = os.getenv("BROKER_API_KEY") or os.getenv("KITE_API_KEY") or os.getenv("ZERODHA_API_KEY")
+                    kite = KiteConnect(api_key=api_key)
+                    kite.set_access_token(access_token)
+                    # Validate token with a simple call
+                    kite.profile()
+                    self._kite = kite
+                except Exception:
+                    self._kite = None
 
         # Try to wire a ready KiteConnect if env provides api_key + access_token
-        import os
-        api_key = os.getenv("BROKER_API_KEY") or os.getenv("KITE_API_KEY") or os.getenv("ZERODHA_API_KEY")
-        access_token = (
-            os.getenv("BROKER_ACCESS_TOKEN") or os.getenv("KITE_ACCESS_TOKEN") or os.getenv("ZERODHA_ACCESS_TOKEN")
-        )
-        if api_key and access_token:
-            try:  # pragma: no cover - external package
-                from kiteconnect import KiteConnect  # type: ignore
+        if self._kite is None:
+            api_key = os.getenv("BROKER_API_KEY") or os.getenv("KITE_API_KEY") or os.getenv("ZERODHA_API_KEY")
+            access_token = (
+                os.getenv("BROKER_ACCESS_TOKEN") or os.getenv("KITE_ACCESS_TOKEN") or os.getenv("ZERODHA_ACCESS_TOKEN")
+            )
+            if api_key and access_token:
+                try:  # pragma: no cover - external package
+                    from kiteconnect import KiteConnect  # type: ignore
 
-                kite = KiteConnect(api_key=api_key)
-                kite.set_access_token(access_token)
-                self._kite = kite
-            except Exception:
-                self._kite = None
+                    kite = KiteConnect(api_key=api_key)
+                    kite.set_access_token(access_token)
+                    self._kite = kite
+                    self._cache_token(access_token)
+                except Exception:
+                    self._kite = None
 
         # Optional TOTP login if requested and tokens missing
         if self._kite is None:
@@ -100,6 +124,29 @@ class ZerodhaDriver(BrokerDriver):
                     # Keep unauthenticated if manual flow fails
                     pass
 
+    def _cache_token(self, access_token: str) -> None:
+        """Cache the access token to a file and .env file."""
+        # Cache to file (existing functionality)
+        with open(self.token_cache_file, 'w') as f:
+            f.write(access_token)
+
+        # Save to .env file
+        env_file = ".env"
+        if os.path.exists(env_file):
+            with open(env_file, 'r') as f:
+                content = f.read()
+        else:
+            content = ""
+
+        key = "BROKER_ACCESS_TOKEN"
+        if re.search(f"^{key}=", content, re.MULTILINE):
+            content = re.sub(f"^{key}=.*", f"{key}={access_token}", content, flags=re.MULTILINE)
+        else:
+            content += f"\n{key}={access_token}\n"
+
+        with open(env_file, 'w') as f:
+            f.write(content)
+
     def _authenticate_via_totp(self) -> Optional[Any]:
         """Programmatic TOTP login using Zerodha web endpoints to obtain access token.
 
@@ -110,7 +157,6 @@ class ZerodhaDriver(BrokerDriver):
         - BROKER_TOTP_KEY
         - BROKER_PASSWORD
         """
-        import os
         try:  # pragma: no cover - external packages
             import requests  # type: ignore
             import pyotp  # type: ignore
@@ -163,6 +209,7 @@ class ZerodhaDriver(BrokerDriver):
             if not access_token:
                 return None
             kite.set_access_token(access_token)
+            self._cache_token(access_token)
             return kite
         except Exception:
             return None
@@ -304,9 +351,9 @@ class ZerodhaDriver(BrokerDriver):
         exch, tradingsymbol = symbol.split(":", 1)
         return Quote(symbol=tradingsymbol, exchange=Exchange[exch], last_price=last_price, raw=data)
 
-    def get_history(self, symbol: str, interval: str, start: str, end: str) -> List[Dict[str, Any]]:
+    def get_history(self, symbol: str, interval: str, start: str, end: str, oi: bool = False) -> List[Dict[str, Any]]:
         if not self._kite:
-            return []
+            raise PermissionError("Broker is not authenticated. Please provide valid credentials.")
         exch, tradingsymbol = symbol.split(":", 1)
         # Normalize common interval aliases to Kite format
         imap = {
@@ -368,6 +415,8 @@ class ZerodhaDriver(BrokerDriver):
 
     # --- Instruments ---
     def download_instruments(self) -> None:
+        if not self._kite:
+            raise PermissionError("Broker is not authenticated. Please provide valid credentials.")
         df = pd.DataFrame(self._kite.instruments())
         columns = ["instrument_token", "exchange_token", "tradingsymbol", "name", "last_price", "expiry", "strike", "tick_size", "lot_size", "instrument_type", "segment", "exchange"]
         header_mapping = {
