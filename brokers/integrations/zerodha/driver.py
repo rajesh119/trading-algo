@@ -29,6 +29,7 @@ class ZerodhaDriver(BrokerDriver):
     """
 
     def __init__(self, *, login_mode: Optional[str] = None) -> None:
+        import os
         super().__init__()
         self.capabilities = BrokerCapabilities(
             supports_historical=True,
@@ -77,7 +78,6 @@ class ZerodhaDriver(BrokerDriver):
 
         # Try to wire a ready KiteConnect if env provides api_key + access_token
         if self._kite is None:
-            import os
             api_key = os.getenv("BROKER_API_KEY") or os.getenv("KITE_API_KEY") or os.getenv("ZERODHA_API_KEY")
             access_token = (
                 os.getenv("BROKER_ACCESS_TOKEN") or os.getenv("KITE_ACCESS_TOKEN") or os.getenv("ZERODHA_ACCESS_TOKEN")
@@ -139,7 +139,6 @@ class ZerodhaDriver(BrokerDriver):
         - BROKER_TOTP_KEY
         - BROKER_PASSWORD
         """
-        import os
         try:  # pragma: no cover - external packages
             import requests  # type: ignore
             import pyotp  # type: ignore
@@ -398,6 +397,8 @@ class ZerodhaDriver(BrokerDriver):
 
     # --- Instruments ---
     def download_instruments(self) -> None:
+        if not self._kite:
+            raise PermissionError("Broker is not authenticated. Please provide valid credentials.")
         df = pd.DataFrame(self._kite.instruments())
         columns = ["instrument_token", "exchange_token", "tradingsymbol", "name", "last_price", "expiry", "strike", "tick_size", "lot_size", "instrument_type", "segment", "exchange"]
         header_mapping = {

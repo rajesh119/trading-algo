@@ -36,16 +36,16 @@ class BacktesterStrategy:
         self.broker.download_instruments()
 
         # Dynamically generate futures symbol
-        base_symbol = symbol.split(':')[-1]
+        base_symbol = symbol.split(':')[-1].replace(' ', '')
         start_month = pd.to_datetime(start_date).strftime('%b').upper()
         start_year = pd.to_datetime(start_date).strftime('%y')
-        futures_symbol = f"NSE:{base_symbol}{start_year}{start_month}FUT"
+        self.futures_symbol = f"NSE:{base_symbol}{start_year}{start_month}FUT"
 
-        logger.info(f"Dynamically generated futures symbol: {futures_symbol}")
+        logger.info(f"Dynamically generated futures symbol: {self.futures_symbol}")
 
         # Fetch historical data
         try:
-            data = self.broker.get_history(futures_symbol, interval, start_date, end_date)
+            data = self.broker.get_history(self.futures_symbol, interval, start_date, end_date)
             if not data:
                 logger.error(f"No historical data found for {futures_symbol}.")
                 return
@@ -99,7 +99,15 @@ class BacktesterStrategy:
 
         # Get lot size for the instrument
         instrument = self.broker.get_instruments()
-        lot_size = instrument[instrument['symbol'] == self.historical_data.iloc[0]['symbol']]['lot_size'].iloc[0]
+        tradingsymbol = self.futures_symbol.split(":")[-1]
+        lot_size_series = instrument[instrument['symbol'] == tradingsymbol]['lot_size']
+
+        if lot_size_series.empty:
+            logger.error(f"Could not find lot size for {tradingsymbol}")
+            self.results = {"error": f"Could not find lot size for {tradingsymbol}"}
+            return
+
+        lot_size = lot_size_series.iloc[0]
 
         # Iterate through the data, leaving room for the 3-candle pattern
         for i in range(2, len(self.historical_data) - 1):
